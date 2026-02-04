@@ -134,3 +134,250 @@ Design `guardrail-apis` for a Multi-Agent System
 >
 > Produce a clean, disciplined, production-grade design.
 
+```yaml
+openapi: 3.0.3
+info:
+  title: Guardrail APIs
+  description: |
+    Guardrail-APIs is a **generic, stateless, enterprise-grade guardrail evaluation service**
+    for multi-agent systems.
+
+    Core principles:
+    - Caller-authenticated (not agent-authenticated)
+    - Stateless, no sessions
+    - Policy resolution is server-side
+    - Rules are deterministic and auditable
+    - Payloads are stage-specific but evaluated generically
+
+  version: "1.0.0"
+
+servers:
+  - url: https://guardrails.internal/v1
+
+security:
+  - ApiKeyAuth: []
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    Decision:
+      type: string
+      enum: [PASS, WARN, FAIL]
+
+    Stage:
+      type: string
+      enum: [PLAN, ACTION, TOOL, MEMORY, OUTPUT]
+
+    AgentIdentity:
+      type: object
+      required: [agent_id, instance_id]
+      properties:
+        agent_id:
+          type: string
+          description: Logical agent identity (validated against caller)
+        instance_id:
+          type: string
+          description: Runtime-unique agent instance identifier
+        agent_tags:
+          type: array
+          items:
+            type: string
+          description: Agent capability or classification tags
+
+    EvaluationContext:
+      type: object
+      additionalProperties: true
+      description: Opaque contextual metadata for rule evaluation
+
+    EvaluationRequest:
+      type: object
+      required: [stage, agent, payload]
+      properties:
+        stage:
+          $ref: '#/components/schemas/Stage'
+        agent:
+          $ref: '#/components/schemas/AgentIdentity'
+        payload:
+          oneOf:
+            - $ref: '#/components/schemas/PlanPayload'
+            - $ref: '#/components/schemas/ActionPayload'
+            - $ref: '#/components/schemas/ToolPayload'
+            - $ref: '#/components/schemas/MemoryPayload'
+            - $ref: '#/components/schemas/OutputPayload'
+        context:
+          $ref: '#/components/schemas/EvaluationContext'
+
+    RuleResult:
+      type: object
+      required: [rule_id, decision]
+      properties:
+        rule_id:
+          type: string
+        decision:
+          $ref: '#/components/schemas/Decision'
+        message:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+
+    EvaluationResponse:
+      type: object
+      required: [decision, results]
+      properties:
+        decision:
+          $ref: '#/components/schemas/Decision'
+        policy_id:
+          type: string
+          description: Resolved policy used for evaluation
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuleResult'
+        audit_id:
+          type: string
+          description: Unique identifier for audit/event correlation
+
+    # ---- Stage-specific payloads ----
+
+    PlanPayload:
+      type: object
+      description: Payload for PLAN-stage evaluation
+      required: [plan]
+      properties:
+        plan:
+          type: string
+          description: High-level plan or reasoning text
+
+    ActionPayload:
+      type: object
+      description: Payload for ACTION-stage evaluation
+      required: [action]
+      properties:
+        action:
+          type: string
+          description: Intended action description
+
+    ToolPayload:
+      type: object
+      description: Payload for TOOL-stage evaluation
+      required: [tool_name]
+      properties:
+        tool_name:
+          type: string
+        arguments:
+          type: object
+          additionalProperties: true
+
+    MemoryPayload:
+      type: object
+      description: Payload for MEMORY-stage evaluation
+      required: [operation]
+      properties:
+        operation:
+          type: string
+          enum: [READ, WRITE, DELETE]
+        content:
+          type: string
+
+    OutputPayload:
+      type: object
+      description: Payload for OUTPUT-stage evaluation
+      required: [output]
+      properties:
+        output:
+          type: string
+
+  responses:
+    UnauthorizedError:
+      description: Caller authentication failed or agent not allowed
+
+paths:
+  /evaluate:
+    post:
+      summary: Evaluate an agent action against resolved guardrail policy
+      description: |
+        Core evaluation endpoint used by agents (via orchestrators/gateways)
+        to validate actions against enterprise guardrails.
+
+        **Key inputs**:
+        - stage: Lifecycle stage of the agent (PLAN, ACTION, TOOL, MEMORY, OUTPUT)
+        - agent.agent_id: Logical agent identity (validated against caller)
+        - agent.instance_id: Runtime-unique identifier for traceability
+        - agent.agent_tags: Tags used for policy resolution
+        - payload: Stage-specific structured payload
+
+        **Key outputs**:
+        - decision: Final aggregated decision (PASS | WARN | FAIL)
+        - policy_id: Server-resolved policy applied
+        - results: Per-rule evaluation results
+        - audit_id: Identifier for audit and governance tracking
+
+        Agents **cannot** specify policy_id directly.
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvaluationRequest'
+      responses:
+        '200':
+          description: Evaluation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /policies:
+    get:
+      summary: List configured guardrail policies
+      description: |
+        Administrative / internal endpoint that lists all configured guardrail
+        policies available in the system.
+
+        **Key outputs**:
+        - policy identifiers
+        - associated rule lists
+        - policy execution mode (strict / permissive)
+
+        This endpoint is intended for:
+        - governance review
+        - debugging
+        - platform tooling
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: List of configured policies
+
+  /rules:
+    get:
+      summary: List registered guardrail rules
+      description: |
+        Administrative / internal endpoint that exposes all rule identifiers
+        currently registered with the guardrail engine.
+
+        **Key outputs**:
+        - rule_id: Unique rule identifiers
+
+        Used for:
+        - policy authoring
+        - validation
+        - governance visibility
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: List of registered rules
+
+```
+
