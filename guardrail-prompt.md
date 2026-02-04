@@ -298,27 +298,23 @@ components:
       description: Caller authentication failed or agent not allowed
 
 paths:
-  /evaluate:
+  /evaluate/plan:
     post:
-      summary: Evaluate an agent action against resolved guardrail policy
+      summary: Evaluate PLAN-stage intent
       description: |
-        Core evaluation endpoint used by agents (via orchestrators/gateways)
-        to validate actions against enterprise guardrails.
+        Evaluates guardrails for an agent's planning or reasoning step.
+
+        **Intent**: Validate plans before execution.
 
         **Key inputs**:
-        - stage: Lifecycle stage of the agent (PLAN, ACTION, TOOL, MEMORY, OUTPUT)
-        - agent.agent_id: Logical agent identity (validated against caller)
-        - agent.instance_id: Runtime-unique identifier for traceability
-        - agent.agent_tags: Tags used for policy resolution
-        - payload: Stage-specific structured payload
+        - agent.agent_id, agent.instance_id
+        - agent.agent_tags
+        - payload.plan
 
         **Key outputs**:
-        - decision: Final aggregated decision (PASS | WARN | FAIL)
-        - policy_id: Server-resolved policy applied
-        - results: Per-rule evaluation results
-        - audit_id: Identifier for audit and governance tracking
-
-        Agents **cannot** specify policy_id directly.
+        - decision (PASS | WARN | FAIL)
+        - policy_id (server-resolved)
+        - audit_id
       security:
         - ApiKeyAuth: []
       requestBody:
@@ -326,10 +322,174 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EvaluationRequest'
+              allOf:
+                - $ref: '#/components/schemas/EvaluationRequest'
+                - type: object
+                  properties:
+                    stage:
+                      enum: [PLAN]
       responses:
         '200':
-          description: Evaluation completed successfully
+          description: PLAN evaluation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /evaluate/action:
+    post:
+      summary: Evaluate ACTION-stage intent
+      description: |
+        Evaluates guardrails before an agent performs an action.
+
+        **Intent**: Prevent unsafe or unauthorized actions.
+
+        **Key inputs**:
+        - agent.agent_id, agent.instance_id
+        - agent.agent_tags
+        - payload.action
+
+        **Key outputs**:
+        - decision
+        - policy_id
+        - audit_id
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/EvaluationRequest'
+                - type: object
+                  properties:
+                    stage:
+                      enum: [ACTION]
+      responses:
+        '200':
+          description: ACTION evaluation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /evaluate/tool:
+    post:
+      summary: Evaluate TOOL invocation intent
+      description: |
+        Evaluates guardrails before an agent invokes a tool.
+
+        **Intent**: Enforce tool allow/deny, argument checks, and rate limits.
+
+        **Key inputs**:
+        - agent identity
+        - payload.tool_name
+        - payload.arguments
+
+        **Key outputs**:
+        - decision
+        - policy_id
+        - audit_id
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/EvaluationRequest'
+                - type: object
+                  properties:
+                    stage:
+                      enum: [TOOL]
+      responses:
+        '200':
+          description: TOOL evaluation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /evaluate/memory:
+    post:
+      summary: Evaluate MEMORY access intent
+      description: |
+        Evaluates guardrails for memory read/write/delete operations.
+
+        **Intent**: Protect sensitive data and memory integrity.
+
+        **Key inputs**:
+        - agent identity
+        - payload.operation
+        - payload.content
+
+        **Key outputs**:
+        - decision
+        - policy_id
+        - audit_id
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/EvaluationRequest'
+                - type: object
+                  properties:
+                    stage:
+                      enum: [MEMORY]
+      responses:
+        '200':
+          description: MEMORY evaluation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /evaluate/output:
+    post:
+      summary: Evaluate OUTPUT emission intent
+      description: |
+        Evaluates guardrails before an agent emits final output.
+
+        **Intent**: Enforce safety, compliance, and formatting rules.
+
+        **Key inputs**:
+        - agent identity
+        - payload.output
+
+        **Key outputs**:
+        - decision
+        - policy_id
+        - audit_id
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/EvaluationRequest'
+                - type: object
+                  properties:
+                    stage:
+                      enum: [OUTPUT]
+      responses:
+        '200':
+          description: OUTPUT evaluation result
           content:
             application/json:
               schema:
@@ -378,6 +538,7 @@ paths:
       responses:
         '200':
           description: List of registered rules
+
 
 ```
 
