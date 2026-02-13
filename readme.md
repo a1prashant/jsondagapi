@@ -275,7 +275,73 @@ This repository is intended for:
 
 ---
 
-## 13. License & Usage
+## 13. MCP Server & Client Setup
+
+### MCP Server (mcpserver.py)
+
+The MCP server provides four main components:
+
+#### 1. Tools (Model-Controlled Actions)
+- **add_numbers(a, b)** – Adds two integers for basic arithmetic
+- **multiply_numbers(a, b)** – Multiplies two numbers (async)
+- **summarize_data(text, ctx)** – Asks the connected LLM to summarize text via Sampling
+
+#### 2. Resources (Application-Controlled Data)
+- **system://status** – Read-only resource providing server health information
+- **config://app-settings** – Exposes application settings as JSON
+
+#### 3. Prompts (User-Invoked Templates)
+- **code_reviewer(code)** – Guides the LLM to perform code reviews for security and performance
+
+#### 4. Lifecycle & Execution
+- Server runs on SSE (Server-Sent Events) transport on `http://127.0.0.1:8000/sse`
+- Enhanced logging via stderr to avoid interfering with transport stream
+
+### MCP Client (mcpclient.py)
+
+The MCP client connects to the server and executes comprehensive feature tests:
+
+#### Phase 1: Fixed Initialization
+- Establishes SSE connection to the server
+- Performs handshake initialization
+- Sets up client capabilities including sampling support
+
+#### Phase 2: Comprehensive Feature Tests
+1. **Test add_numbers** – Calls the addition tool with values 25 + 75
+2. **Test multiply_numbers** – Calls the multiplication tool with 12 × 12
+3. **Test summarize_data** – Tests server-to-client sampling callback
+4. **Test resources** – Reads the system://status resource
+
+### Running the MCP Server & Client
+
+**Step 1: Start the MCP Server**
+```bash
+python mcpserver.py
+```
+The server will start listening on SSE transport at `http://127.0.0.1:8000/sse`
+
+**Step 2: Run the MCP Client**
+```bash
+python mcpclient.py
+```
+The client will:
+- Connect to the running server
+- Initialize the handshake
+- Execute all feature tests
+- Display results for each test
+- Print "All tests completed successfully!" upon completion
+
+### Key Implementation Notes
+
+- **Sampling**: The server can request the client's LLM to perform work via `ctx.sample()`
+- **Async Support**: Tools can be defined as async for non-blocking operations
+- **Logging**: All operations are logged with timestamps and operation types
+- **Transport**: Uses SSE (Server-Sent Events) for network-based communication
+- **Error Handling**: Client gracefully handles initialization and sampling failures
+
+---
+
+## 14. License & Usage
 
 Internal platform component (license and usage to be defined).
 # jsondagapi
